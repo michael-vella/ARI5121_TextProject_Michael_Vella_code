@@ -6,7 +6,6 @@ from src.constants import OLLAMA_HOST
 from src.models.base import BaseModel, PromptResponse
 
 
-
 class OllamaModel(BaseModel):
     def __init__(self, sleep_time: int, model_name: str) -> None:
         if model_name is None:
