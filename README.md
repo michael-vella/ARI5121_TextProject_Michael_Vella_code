@@ -8,6 +8,10 @@ To finalise README.md at the end of the project.
 - **Python version used**: 3.12.3 (refers to Python version used in this project not the Python version used in the original replication paper).
 - Requires Python & Ollama to be installed locally.
 
+## Datasets
+
+- [HumanEval](https://arxiv.org/abs/2107.03374) - Downloaded from [HuggingFace](https://huggingface.co/datasets/openai/openai_humaneval).
+
 ## Create a Python virtual environment (.venv)
 
 Assuming that Python is already pre-installed on the host machine.
