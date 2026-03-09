@@ -49,28 +49,44 @@ def run_test(generated_code: str, test_code: str, entry_point: str) -> bool:
     finally:
         os.unlink(tmp_path)
 
-pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
-row_zero = pd_df.iloc[0]
-row_zero_prompt = row_zero["prompt"]
-row_zero_test = clean_test(row_zero["test"])
-row_zero_entry_point = row_zero["entry_point"]
 
-print("\nPrompt for row zero:", row_zero_prompt)
-print("\nTest for row zero:", row_zero_test)
+sleep_time = 0
 
-sleep_time=0
 initial_prompt = f"Complete this Python function. Return only the code, no explanation.\n\n{{prompt}}"
-
 llm: BaseModel = ModelFactory.get_llm("ollama")(
     sleep_time=0,
     model_name="deepseek-r1:1.5b"
 )
 
-response = llm.prompt(initial_prompt.format(prompt=row_zero_prompt))
-print("Response:", response)
+pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
 
-code_response = extract_code(response["completion_message"])
-print("Code generated:", code_response)
+passed = 0
+total = len(pd_df)
 
-test_result = run_test(code_response, row_zero_test, row_zero_entry_point)
-print("Test result:", test_result)
+for index, row in pd_df.iterrows():
+    task_id = row["task_id"]
+    prompt = row["prompt"]
+    test = clean_test(row["test"])
+    entry_point = row["entry_point"]
+
+    print("Task ID:", task_id)
+    print("\nPrompt:", prompt)
+    print("\nTest:", test)
+
+    response = llm.prompt(initial_prompt.format(prompt=prompt))
+    print("\nResponse:", response)
+
+    code_response = extract_code(response["completion_message"])
+    print("\nCode generated:", code_response)
+
+    success = run_test(code_response, test, entry_point)
+    print("\nTest result:", success)
+    if success:
+        print("\nTest Passed!")
+        passed += 1
+    else:
+        print("\nTest Failed...")
+
+print("Passed:", passed)
+print("Total:", total)
+print("pass@1 score", passed / total)
