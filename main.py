@@ -6,7 +6,8 @@ import re
 import pandas as pd
 
 from src.models.model_factory import ModelFactory
-from src.models.base import BaseModel
+from src.models.base import BaseModel, PromptResponse
+from src.utils.logger import setup_logger
 
 
 def extract_code(model_output: str) -> str:
@@ -25,12 +26,14 @@ def clean_test(test_code: str) -> str:
     idx = test_code.find("def ")
     return test_code[idx:] if idx != -1 else test_code
 
+def add_imports(generated_code: str) -> str:
+    return "from typing import *" + "\n\n" + generated_code
+
 def run_test(generated_code: str, test_code: str, entry_point: str) -> bool:
     """
     Combines generated code + test harness, runs it, returns True if it passes.
     """
-    full_program = "from typing import *" + "\n\n" + generated_code + "\n\n" + test_code + "\n\n" + f"check({entry_point})"
-    print("Full program:", full_program)
+    full_program = generated_code + "\n\n" + test_code + "\n\n" + f"check({entry_point})"
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(full_program)
@@ -50,9 +53,12 @@ def run_test(generated_code: str, test_code: str, entry_point: str) -> bool:
         os.unlink(tmp_path)
 
 
+logger = setup_logger()
+
+
 sleep_time = 0
 
-initial_prompt = f"Complete this Python function. Return only the code, no explanation.\n\n{{prompt}}"
+initial_prompt = f"Complete this Python function. Return only the code, no explanation.\n\n{{code_input}}"
 llm: BaseModel = ModelFactory.get_llm("ollama")(
     sleep_time=0,
     model_name="deepseek-r1:1.5b"
@@ -61,32 +67,43 @@ llm: BaseModel = ModelFactory.get_llm("ollama")(
 pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
 
 passed = 0
+total_time = 0
+total_input_tokens = 0
+total_output_tokens = 0
 total = len(pd_df)
 
 for index, row in pd_df.iterrows():
     task_id = row["task_id"]
-    prompt = row["prompt"]
+    prompt = initial_prompt.format(code_input=row["prompt"])
     test = clean_test(row["test"])
     entry_point = row["entry_point"]
 
-    print("Task ID:", task_id)
-    print("\nPrompt:", prompt)
-    print("\nTest:", test)
+    logger.info(f"Task ID: {task_id}")
+    logger.info(f"\nPrompt:\n'''\n{prompt}'''")
+    logger.info(f"\nTests:\n```\n{test}```")
 
-    response = llm.prompt(initial_prompt.format(prompt=prompt))
-    print("\nResponse:", response)
+    response: PromptResponse = llm.prompt(prompt=prompt)
 
+    time_taken = response["time_taken"]
+    input_token_cnt = response["prompt_tokens"]
+    output_token_cnt = response["completion_tokens"]
     code_response = extract_code(response["completion_message"])
-    print("\nCode generated:", code_response)
+    final_code = add_imports(generated_code=code_response)
 
-    success = run_test(code_response, test, entry_point)
-    print("\nTest result:", success)
+    logger.info(f"\nTime taken: '{time_taken}'")
+    logger.info(f"Input token count: '{input_token_cnt}'")
+    logger.info(f"Output token count: '{output_token_cnt}'")
+    logger.info(f"\nCode generated:\n```\n{final_code}```")
+
+    success = run_test(final_code, test, entry_point)
     if success:
-        print("\nTest Passed!")
+        logger.info("\nTests passed!")
         passed += 1
     else:
-        print("\nTest Failed...")
+        logger.info("\nTests failed...")
+    
+    logger.info(f"\n{'-' * 50}\n")
 
-print("Passed:", passed)
-print("Total:", total)
-print("pass@1 score", passed / total)
+logger.info(f"Passed count: '{passed}'")
+logger.info(f"Total count: '{total}'")
+logger.info(f"pass@1 score: '{passed / total}'")
