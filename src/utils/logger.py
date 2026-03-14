@@ -8,7 +8,7 @@ class InfoOnlyFilter(logging.Filter):
 
 
 def setup_logger() -> logging.Logger:
-    log_filename = datetime.now().strftime(f"app_%Y-%m-%d_%H-%M-%S.log")
+    log_filename = datetime.now().strftime(f"logs/app_%Y-%m-%d_%H-%M-%S.log")
 
     # Create logger
     logger = logging.getLogger("my_app")
