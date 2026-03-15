@@ -74,7 +74,7 @@ def main():
         model_name=args.model
     )
 
-    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet").iloc[3: 6]
+    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
 
     passed = 0
     total_time = 0
