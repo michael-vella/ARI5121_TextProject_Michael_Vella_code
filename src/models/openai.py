@@ -1,23 +1,23 @@
 import time
 
-from ollama import Client
+from openai import OpenAI
 
-from src.constants import OLLAMA_HOST, API_TIMEOUT, API_RETRY
+from src.constants import OPENAI_API_KEY, API_TIMEOUT, API_RETRY
 from src.models.base import BaseModel, PromptResponse
 
 
-class OllamaModel(BaseModel):
+class OpenAIModel(BaseModel):
     def __init__(self, sleep_time: int, model_name: str) -> None:
         if model_name is None:
-            error_msg = "Ollama model name is required"
+            error_msg = "OpenAI model name is required"
             raise Exception(error_msg)
-        
+
         super().__init__(sleep_time=sleep_time)
 
         self.__model_name = model_name
-        self.__client = Client(host=OLLAMA_HOST, timeout=API_TIMEOUT) # timeout after 5 minutes
+        self.__client = OpenAI(api_key=OPENAI_API_KEY, timeout=API_TIMEOUT)
         self.__max_retries = API_RETRY
-        self.__backoff_base = 2 # seconds
+        self.__backoff_base = 2  # seconds
 
     def prompt(self, prompt: str) -> PromptResponse:
         self._logger.debug(f"Sleeping for '{self._sleep_time}' seconds")
@@ -26,35 +26,29 @@ class OllamaModel(BaseModel):
 
         last_exception: Exception | None = None
 
-        # implementing a retry mechanism
-        # sometimes Ollama is hanging (sending a request but never recieving a response)
-        # most probably, this is due to the limited computed available
-        # hence, we implement a timeout and an API retry mechanism
-        # we retry 3 times
-        # after each retry, we wait 2^n where n is the attempt number to allow the server to (hopefully) heal
         for attempt in range(1, self.__max_retries + 1):
             try:
-                self._logger.debug(f"Invoking Ollama API client (attempt {attempt}/{self.__max_retries})")
-                response = self.__client.chat(
+                self._logger.debug(f"Invoking OpenAI API client (attempt {attempt}/{self.__max_retries})")
+                start_time = time.monotonic()
+
+                response = self.__client.chat.completions.create(
                     model=self.__model_name,
                     messages=[{
                         "role": "user",
                         "content": prompt
                     }]
                 )
-                self._logger.debug("Finished Ollama API client invocation")
-
-                self._logger.debug("Converting time taken from nano seconds to seconds")
-                time_taken_nano_s = response.total_duration
-                time_taken_s = time_taken_nano_s / 1_000_000_000
+                self._logger.debug("Finished OpenAI API client invocation")
+                
+                time_taken_s = time.monotonic() - start_time
 
                 self._logger.debug("Returning response")
                 return PromptResponse(
                     time_taken=time_taken_s,
                     prompt_message=prompt,
-                    prompt_tokens=response.prompt_eval_count,
-                    completion_message=response.message.content,
-                    completion_tokens=response.eval_count,
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_message=response.choices[0].message.content,
+                    completion_tokens=response.usage.completion_tokens,
                     model_name=response.model
                 )
 

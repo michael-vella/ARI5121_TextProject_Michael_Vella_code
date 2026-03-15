@@ -2,6 +2,7 @@ import logging
 
 from src.models.base import BaseModel
 from src.models.ollama import OllamaModel
+from src.models.openai import OpenAIModel
 
 
 logger = logging.getLogger("my_app")
@@ -18,6 +19,9 @@ class ModelFactory:
             case "ollama":
                 logger.debug("Returning a (non-instantiated) Ollama class model")
                 return OllamaModel
+            case "openai":
+                logger.debug("Returning a (non-instantiated) OpenAI class model")
+                return OpenAIModel
             case _:
                 error_msg = f"Unknown model provider name '{model_provider_name}'"
                 logger.error(error_msg)

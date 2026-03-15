@@ -2,6 +2,7 @@ import subprocess
 import tempfile
 import os
 import re
+import argparse
 
 import pandas as pd
 
@@ -52,18 +53,28 @@ def run_test(generated_code: str, test_code: str, entry_point: str) -> bool:
     finally:
         os.unlink(tmp_path)
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run LLM prompts")
+    parser.add_argument("--provider", choices=["ollama", "openai"], required=True, help="LLM provider to use")
+    parser.add_argument("--model", required=True, help="Model name to use")
+    return parser.parse_args()
+
+# ollama: deepseek-r1:1.5b
+# openai: gpt-4o-mini-2024-07-18
+
 def main():
+    args = parse_args()
     logger = setup_logger()
 
     sleep_time = 0
 
-    initial_prompt = f"Complete this Python function. Return only the code, no explanation.\n\n{{code_input}}"
-    llm: BaseModel = ModelFactory.get_llm("ollama")(
+    initial_prompt = "Complete this Python function. Return only the code, no explanation.\n\n{code_input}"
+    llm: BaseModel = ModelFactory.get_llm(args.provider)(
         sleep_time=sleep_time,
-        model_name="deepseek-r1:1.5b"
+        model_name=args.model
     )
 
-    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
+    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet").iloc[3: 6]
 
     passed = 0
     total_time = 0
