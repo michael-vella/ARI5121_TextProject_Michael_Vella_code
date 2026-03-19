@@ -3,6 +3,7 @@ import tempfile
 import os
 import re
 import argparse
+import textwrap
 
 import pandas as pd
 
@@ -20,8 +21,8 @@ def extract_code(model_output: str) -> str:
         # Fallback: use raw output if no fences found
         code = model_output.strip()
 
-    # Combine prompt + completion so the function name is defined
-    return code
+    # if code is idented, it's fixed.
+    return textwrap.dedent(code)
 
 def clean_test(test_code: str) -> str:
     idx = test_code.find("def ")
@@ -68,7 +69,7 @@ def main():
 
     sleep_time = 0
 
-    initial_prompt = "Complete this Python function. Return only the code, no explanation.\n\n{code_input}"
+    initial_prompt = "Complete this Python function. Using the same method signature, return the method with correct code, no explanation.\n\n{code_input}"
     llm: BaseModel = ModelFactory.get_llm(args.provider)(
         sleep_time=sleep_time,
         model_name=args.model
