@@ -1,5 +1,6 @@
 import ast
 
+
 class CodeEvaluation:
     @staticmethod
     def evaluate_code(code: str, test_cases: str, entry_point: str) -> tuple[bool, list]:

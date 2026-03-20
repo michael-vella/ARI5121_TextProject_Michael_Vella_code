@@ -163,6 +163,7 @@ CODE_GENERATION_PROMPT = """You are a programmer tasked with solving a given pro
 **Important Instructions:**
 - Do not add any explanation.
 - The generated **{language}** code must be inside a triple backtick (```) code block.
+- Do not add testing code for example assert statement in your code.
 - Strictly follow the sample input and output format"""
 
 
@@ -220,7 +221,7 @@ def main():
     provider: str = args.provider
     model_name: str = args.model
 
-    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet").iloc[162:163]
+    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
 
     # in the original work, there is support for multiple languages
     # we will only support Python 3 for the sake of simplicity
@@ -268,13 +269,13 @@ def main():
                 language=language,
                 problem=problem
             )
-            logger.info(f"\n--- INITIAL PLAN GENERATION (INPUT):\n\n{plan_input_prompt}")
+            logger.info(f"\n--- INITIAL PLAN GENERATION (LLM INPUT):\n\n{plan_input_prompt}")
             plan_response: PromptResponse = llm.prompt(prompt=plan_input_prompt)
             raw_plan = plan_response["completion_message"]
-            logger.info(f"\n--- INITIAL PLAN GENERATION (RESPONSE):\n\n{raw_plan}")
+            logger.info(f"\n--- INITIAL PLAN GENERATION (LLM RESPONSE):\n\n{raw_plan}")
 
             metrics.record(Agent.PLANNING, task_id, plan_response)
-            logger.info(f"\n--- INITIAL PLAN GENERATION (METRICS):")
+            logger.info(f"\n--- INITIAL PLAN GENERATION (LLM METRICS):")
             print_llm_response_metrics(logger=logger, response=plan_response)
             # end: initial plan generation
 
@@ -289,13 +290,13 @@ def main():
                 language=language,
                 problem_with_plan=problem_with_plan
             )
-            logger.info(f"\n--- SIMULATION (INPUT):\n\n{simulation_input_prompt}")
+            logger.info(f"\n--- SIMULATION (LLM INPUT):\n\n{simulation_input_prompt}")
             simulation_response: PromptResponse = llm.prompt(prompt=simulation_input_prompt)
             raw_simulation = simulation_response["completion_message"]
-            logger.info(f"\n--- SIMULATION (RESPONSE):\n\n{raw_simulation}")
+            logger.info(f"\n--- SIMULATION (LLM RESPONSE):\n\n{raw_simulation}")
 
             metrics.record(Agent.SIMULATION, task_id, simulation_response)
-            logger.info(f"\n--- SIMULATION (METRICS):")
+            logger.info(f"\n--- SIMULATION (LLM METRICS):")
             print_llm_response_metrics(logger=logger, response=simulation_response)
             # end: simulation
 
@@ -306,13 +307,13 @@ def main():
                     problem_with_plan=problem_with_plan,
                     critique=raw_simulation
                 )
-                logger.info(f"\n--- PLAN REFINEMENT (INPUT):\n\n{plan_refinement_input_prompt}")
+                logger.info(f"\n--- PLAN REFINEMENT (LLM INPUT):\n\n{plan_refinement_input_prompt}")
                 plan_refinement_response: PromptResponse = llm.prompt(prompt=plan_refinement_input_prompt)
                 plan = plan_refinement_response["completion_message"]
-                logger.info(f"\n--- REFINEMENT RESPONSE (RESPONSE):\n\n{plan}")
+                logger.info(f"\n--- REFINEMENT RESPONSE (LLM RESPONSE):\n\n{plan}")
 
                 metrics.record(Agent.PLAN_REFINEMENT, task_id, plan_refinement_response)
-                logger.info(f"\n--- PLAN REFINEMENT (METRICS):")
+                logger.info(f"\n--- PLAN REFINEMENT (LLM METRICS):")
                 print_llm_response_metrics(logger=logger, response=plan_refinement_response)
             # end: plan refinement
 
@@ -326,16 +327,16 @@ def main():
             language=language,
             problem_with_plan=problem_with_plan
         )
-        logger.info(f"\n--- CODE GENERATION (INPUT):\n\n{code_generation_input_prompt}")
+        logger.info(f"\n--- CODE GENERATION (LLM INPUT):\n\n{code_generation_input_prompt}")
         code_generation_response: PromptResponse = llm.prompt(prompt=code_generation_input_prompt)
         raw_code = code_generation_response["completion_message"]
-        logger.info(f"\n--- CODE GENERATION (RESPONSE):\n\n{raw_code}")
+        logger.info(f"\n--- CODE GENERATION (LLM RESPONSE):\n\n{raw_code}")
 
         code = extract_code(raw_code)
         logger.info(f"\n--- CODE GENERATION (AFTER CLEANUP):\n\n{code}")
 
         metrics.record(Agent.CODE_GENERATION, task_id, code_generation_response)
-        logger.info(f"\n--- CODE GENERATION (METRICS):")
+        logger.info(f"\n--- CODE GENERATION (LLM METRICS):")
         print_llm_response_metrics(logger=logger, response=code_generation_response)
         # end: code generation
 
@@ -349,9 +350,9 @@ def main():
 
         if passed:
             pass_count += 1
-            logger.info("\n--- ALL TESTS PASSED!")
-            logger.info(f"\n{'-' * 50}\n")
-            break
+            logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
+            logger.info(f"\n{'-' * 200}\n")
+            continue
     
         # Debugging Phase
         for debug_no in range(1, max_debug_try + 1):
@@ -365,16 +366,16 @@ def main():
                 code=code,
                 test_log=formatted_test_log
             )
-            logger.info(f"\n--- DEBUGGING (INPUT):\n\n{debugging_input_prompt}")
+            logger.info(f"\n--- DEBUGGING (LLM INPUT):\n\n{debugging_input_prompt}")
             debugging_response: PromptResponse = llm.prompt(prompt=debugging_input_prompt)
             raw_debugging_str = debugging_response["completion_message"]
-            logger.info(f"\n--- DEBUGGING (RESPONSE):\n\n{raw_debugging_str}")
+            logger.info(f"\n--- DEBUGGING (LLM RESPONSE):\n\n{raw_debugging_str}")
 
             code = extract_code(raw_debugging_str)
             logger.info(f"\n--- DEBUGGING (CODE AFTER CLEANUP):\n\n{code}")
 
             metrics.record(Agent.DEBUGGING, task_id, debugging_response)
-            logger.info(f"\n--- DEBUGGING (METRICS):")
+            logger.info(f"\n--- DEBUGGING (LLM METRICS):")
             print_llm_response_metrics(logger=logger, response=debugging_response)
 
             # start: test code generated
@@ -386,14 +387,18 @@ def main():
             # end: test code generated
             # end: debugging
 
+            # exit debugging loop
             if passed:
-                pass_count += 1
-                logger.info("\n--- ALL TESTS PASSED!")
-                logger.info(f"\n{'-' * 50}\n")
                 break
         
-        logger.info(f"\n--- TESTS FAILED AFTER PERFORMING '{max_plan_try}' PLANNING TRIES AND '{max_debug_try}' DEBUGGING TRIES...")
-        logger.info(f"\n{'-' * 50}\n")
+        if passed:
+            pass_count += 1
+            logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
+            logger.info(f"\n{'-' * 200}\n")
+            continue
+        
+        logger.info(f"\n--- TESTS FAILED FOR TASK '{task_id}' AFTER PERFORMING '{max_plan_try}' PLANNING TRIES AND '{max_debug_try}' DEBUGGING TRIES...")
+        logger.info(f"\n{'-' * 200}\n")
 
     logger.info(metrics.summary())
 
