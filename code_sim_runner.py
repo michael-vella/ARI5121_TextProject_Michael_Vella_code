@@ -62,6 +62,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run LLM prompts")
     parser.add_argument("--provider", choices=["ollama", "openai"], required=True, help="LLM provider to use")
     parser.add_argument("--model", required=True, help="Model name to use")
+    parser.add_argument("--max_plan_try", required=True, help="Max. no. of planning agent retry")
+    parser.add_argument("--max_debug_try", required=True, help="Max. no. of debugging agent retry")
     return parser.parse_args()
 
 def print_llm_response_metrics(logger: logging.Logger, response: PromptResponse) -> None:
@@ -220,6 +222,9 @@ def main():
 
     provider: str = args.provider
     model_name: str = args.model
+    # hyperparameters - vary in the OG paper but better pass@1 results with larger values
+    max_plan_try: int = int(args.max_plan_try)
+    max_debug_try: int = int(args.max_debug_try)
 
     pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
 
@@ -236,11 +241,6 @@ def main():
     metrics = MetricsState()
     total = len(pd_df)
     pass_count = 0
-
-    # hyperparameters - vary in the OG paper but better pass@1 results with larger values
-    # we will use 1 to avoid consumption of time/tokens
-    max_plan_try: int = 1
-    max_debug_try: int = 1
 
     logger.info(f"MODEL: '{model_name}'")
     logger.info("HYPERPARAMETERS:")
@@ -317,66 +317,28 @@ def main():
                 print_llm_response_metrics(logger=logger, response=plan_refinement_response)
             # end: plan refinement
 
-        # update `problem_with_plan` just in case plan was refined
-        problem_with_plan = f"### Problem:\n{problem}\n\n{plan}"
+            # update `problem_with_plan` just in case plan was refined
+            problem_with_plan = f"### Problem:\n{problem}\n\n{plan}"
 
-        # Coding Phase
-        # start: code generation
-        logger.info("\n--------- CODING PHASE ---------")
-        code_generation_input_prompt = CODE_GENERATION_PROMPT.format(
-            language=language,
-            problem_with_plan=problem_with_plan
-        )
-        logger.info(f"\n--- CODE GENERATION (LLM INPUT):\n\n{code_generation_input_prompt}")
-        code_generation_response: PromptResponse = llm.prompt(prompt=code_generation_input_prompt)
-        raw_code = code_generation_response["completion_message"]
-        logger.info(f"\n--- CODE GENERATION (LLM RESPONSE):\n\n{raw_code}")
-
-        code = extract_code(raw_code)
-        logger.info(f"\n--- CODE GENERATION (AFTER CLEANUP):\n\n{code}")
-
-        metrics.record(Agent.CODE_GENERATION, task_id, code_generation_response)
-        logger.info(f"\n--- CODE GENERATION (LLM METRICS):")
-        print_llm_response_metrics(logger=logger, response=code_generation_response)
-        # end: code generation
-
-        # start: test code generated
-        passed, test_log = CodeEvaluation.evaluate_code(
-            code=code,
-            test_cases=tests,
-            entry_point=entry_point
-        )
-        # end: test code generated
-
-        if passed:
-            pass_count += 1
-            logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
-            logger.info(f"\n{'-' * 200}\n")
-            continue
-    
-        # Debugging Phase
-        for debug_no in range(1, max_debug_try + 1):
-            # start: debugging
-            logger.info(f"\n--------- DEBUGGING PHASE ITERATION NUMBER '{debug_no}' ---------")
-
-            formatted_test_log = format_test_logs(test_log)
-            debugging_input_prompt = DEBUGGING_PROMPT.format(
+            # Coding Phase
+            # start: code generation
+            logger.info("\n--------- CODING PHASE ---------")
+            code_generation_input_prompt = CODE_GENERATION_PROMPT.format(
                 language=language,
-                problem_with_plan=problem_with_plan,
-                code=code,
-                test_log=formatted_test_log
+                problem_with_plan=problem_with_plan
             )
-            logger.info(f"\n--- DEBUGGING (LLM INPUT):\n\n{debugging_input_prompt}")
-            debugging_response: PromptResponse = llm.prompt(prompt=debugging_input_prompt)
-            raw_debugging_str = debugging_response["completion_message"]
-            logger.info(f"\n--- DEBUGGING (LLM RESPONSE):\n\n{raw_debugging_str}")
+            logger.info(f"\n--- CODE GENERATION (LLM INPUT):\n\n{code_generation_input_prompt}")
+            code_generation_response: PromptResponse = llm.prompt(prompt=code_generation_input_prompt)
+            raw_code = code_generation_response["completion_message"]
+            logger.info(f"\n--- CODE GENERATION (LLM RESPONSE):\n\n{raw_code}")
 
-            code = extract_code(raw_debugging_str)
-            logger.info(f"\n--- DEBUGGING (CODE AFTER CLEANUP):\n\n{code}")
+            code = extract_code(raw_code)
+            logger.info(f"\n--- CODE GENERATION (AFTER CLEANUP):\n\n{code}")
 
-            metrics.record(Agent.DEBUGGING, task_id, debugging_response)
-            logger.info(f"\n--- DEBUGGING (LLM METRICS):")
-            print_llm_response_metrics(logger=logger, response=debugging_response)
+            metrics.record(Agent.CODE_GENERATION, task_id, code_generation_response)
+            logger.info(f"\n--- CODE GENERATION (LLM METRICS):")
+            print_llm_response_metrics(logger=logger, response=code_generation_response)
+            # end: code generation
 
             # start: test code generated
             passed, test_log = CodeEvaluation.evaluate_code(
@@ -385,20 +347,59 @@ def main():
                 entry_point=entry_point
             )
             # end: test code generated
-            # end: debugging
 
-            # exit debugging loop
             if passed:
+                pass_count += 1
+                logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
+                logger.info(f"\n{'-' * 200}\n")
                 break
         
-        if passed:
-            pass_count += 1
-            logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
-            logger.info(f"\n{'-' * 200}\n")
-            continue
+            # Debugging Phase
+            for debug_no in range(1, max_debug_try + 1):
+                # start: debugging
+                logger.info(f"\n--------- DEBUGGING PHASE ITERATION NUMBER '{debug_no}' ---------")
+
+                formatted_test_log = format_test_logs(test_log)
+                debugging_input_prompt = DEBUGGING_PROMPT.format(
+                    language=language,
+                    problem_with_plan=problem_with_plan,
+                    code=code,
+                    test_log=formatted_test_log
+                )
+                logger.info(f"\n--- DEBUGGING (LLM INPUT):\n\n{debugging_input_prompt}")
+                debugging_response: PromptResponse = llm.prompt(prompt=debugging_input_prompt)
+                raw_debugging_str = debugging_response["completion_message"]
+                logger.info(f"\n--- DEBUGGING (LLM RESPONSE):\n\n{raw_debugging_str}")
+
+                code = extract_code(raw_debugging_str)
+                logger.info(f"\n--- DEBUGGING (CODE AFTER CLEANUP):\n\n{code}")
+
+                metrics.record(Agent.DEBUGGING, task_id, debugging_response)
+                logger.info(f"\n--- DEBUGGING (LLM METRICS):")
+                print_llm_response_metrics(logger=logger, response=debugging_response)
+
+                # start: test code generated
+                passed, test_log = CodeEvaluation.evaluate_code(
+                    code=code,
+                    test_cases=tests,
+                    entry_point=entry_point
+                )
+                # end: test code generated
+                # end: debugging
+
+                # exit debugging loop
+                if passed:
+                    break
         
-        logger.info(f"\n--- TESTS FAILED FOR TASK '{task_id}' AFTER PERFORMING '{max_plan_try}' PLANNING TRIES AND '{max_debug_try}' DEBUGGING TRIES...")
-        logger.info(f"\n{'-' * 200}\n")
+            if passed:
+                pass_count += 1
+                logger.info(f"\n--- ALL TESTS PASSED FOR TASK '{task_id}'!")
+                logger.info(f"\n{'-' * 200}\n")
+                break
+        
+        if not passed:
+            logger.info(f"\n--- TESTS FAILED FOR TASK '{task_id}' AFTER PERFORMING '{max_plan_try}' PLANNING TRIES AND '{max_debug_try}' DEBUGGING TRIES...")
+            logger.info(f"\n{'-' * 200}\n")
 
     logger.info(metrics.summary())
 
