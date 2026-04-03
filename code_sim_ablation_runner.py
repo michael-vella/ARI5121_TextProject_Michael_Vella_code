@@ -4,6 +4,7 @@ import argparse
 
 import pandas as pd
 
+from src.dataset_factory import DatasetFactory
 from src.utils.code_evaluation import CodeEvaluation
 from src.models.model_factory import ModelFactory
 from src.models.base import BaseModel, PromptResponse
@@ -180,7 +181,7 @@ def main():
     max_plan_try: int = int(args.max_plan_try)
     max_debug_try: int = int(args.max_debug_try)
 
-    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
+    pd_df: pd.DataFrame = DatasetFactory.get_code_dataset()
 
     # in the original work, there is support for multiple languages
     # we will only support Python 3 for the sake of simplicity

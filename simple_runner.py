@@ -7,6 +7,7 @@ import textwrap
 
 import pandas as pd
 
+from src.dataset_factory import DatasetFactory
 from src.models.model_factory import ModelFactory
 from src.models.base import BaseModel, PromptResponse
 from src.utils.logger import setup_logger
@@ -75,7 +76,7 @@ def main():
         model_name=args.model
     )
 
-    pd_df: pd.DataFrame = pd.read_parquet("datasets/human_eval/data.parquet")
+    pd_df: pd.DataFrame = DatasetFactory.get_code_dataset()
 
     passed = 0
     total_time = 0
