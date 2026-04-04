@@ -10,6 +10,7 @@ class Agent(StrEnum):
     PLAN_REFINEMENT = "plan_refinement"
     CODE_GENERATION = "code_generation"
     DEBUGGING = "debugging"
+    MATH_GENERATION = "math_generation"
  
  
 @dataclass
